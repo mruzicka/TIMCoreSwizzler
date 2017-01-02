@@ -1,0 +1,5 @@
+.Makefile.vars
+LoginWindowInputMenuUpdate
+*.o
+BuildUtils.pyc
+installroot/
