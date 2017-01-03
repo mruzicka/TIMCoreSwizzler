@@ -13,6 +13,17 @@ def getParentDir():
   directory = os.path.dirname(os.path.abspath(directory))
   sys.stdout.write(directory)
 
+def getExistingParentDir():
+  directory = os.path.abspath(sys.argv[1])
+  while True:
+    parent_directory = os.path.dirname(directory)
+    if parent_directory == directory:
+      break
+    directory = parent_directory
+    if os.path.exists(directory):
+      break
+  sys.stdout.write(directory)
+
 def _deepEncode(value):
   if isinstance(value, dict):
     return {_deepEncode(k): _deepEncode(v) for k, v in value.items()}
@@ -71,35 +82,41 @@ def _processSettings(properties, settings):
     expressions.append('None')
 
   for key, expression in zip(keys, expressions):
-    key = key.decode(encoding)
-    try:
-      value = _deepEncode(properties[key])
-    except KeyError:
-      value = None
-
-    value = eval(expression, globals(), {'value': value})
+    value = eval(expression, globals(), {'properties': properties})
 
     if value is None:
       try:
-        del properties[key]
+        del properties[0][key]
       except KeyError:
         pass
     else:
-      properties[key] = _deepDecode(value)
+      properties[0][key] = value
 
-def processPList():
+def processPLists(count=1):
   global CF, distutils
   import CoreFoundation as CF, distutils.util
 
-  plist = sys.argv[1]
+  properties = []
+  if count > 0:
+    count += 1
+    for i in range(1, count):
+      try:
+        f = open(sys.argv[i], 'rb')
+      except:
+        properties.append({})
+        continue
+      try:
+        properties.append(_deepEncode(_readPList(f)))
+      finally:
+        f.close()
+  else:
+    count = 1
+    properties.append({})
 
-  with open(plist, 'rb') as f:
-    properties = _readPList(f)
-
-  _processSettings(properties, sys.argv[2:])
+  _processSettings(properties, sys.argv[count:])
 
   with os.fdopen(os.dup(sys.stdout.fileno()), 'wb') as f:
-    _writePList(properties, f)
+    _writePList(_deepDecode(properties[0]), f)
 
 def _getCurrentVariables(argv):
   variables = argv[0::2]

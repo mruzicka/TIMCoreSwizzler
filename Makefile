@@ -6,23 +6,24 @@ BUNDLENAME=Login Window Input Menu Update
 BINNAME=$(SRCNAME)
 DISPLAYNAME=$(BUNDLENAME)
 BUNDLEID=net.mruza.LoginWindowInputMenuUpdate
-BUNDLE_PRINCIPAL_CLASS=LWIMUObserverSubClass
-WRAPPED_BUNDLE_PATH=/System/Library/LoginPlugins/DisplayServices.original.loginPlugin
+WRAPPED_BUNDLE_PATH=/Library/LoginPlugins/DisplayServices.loginPlugin
 
 BUNDLEDIR=$(DEFAULT_BUNDLEDIR)
 
 #### End Of User Configurable Variables ########################################
 
 # note the -emit-llvm flag allows for elimination of unused code (functions) during linking
-CFLAGS+=-O3 -fpic -fobjc-arc -emit-llvm -DLWIMU_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH))) -DLWIMU_BUNDLE_PRINCIPAL_CLASS=$(call shellquote,$(call cquote,$(BUNDLE_PRINCIPAL_CLASS)))
+CFLAGS+=-O3 -fpic -fobjc-arc -emit-llvm -DLWIMU_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH)))
 LDLIBS=-bundle -framework Foundation -framework Carbon
 
 override SRCNAME=LoginWindowInputMenuUpdate
-override DEFAULT_BUNDLEDIR=installroot/$(BUNDLENAME)
+override DEFAULT_BUNDLEDIR=installroot/$(BUNDLENAME).bundle
 override VARSFILE=.$(MAKEFILE).vars
 
 BUNDLECONTENTSDIR=$(BUNDLEDIR)/Contents
 BUNDLEEXEDIR=$(BUNDLECONTENTSDIR)/MacOS
+
+WRAPPED_BUNDLE_PARENTDIR=$(call parentdir,$(WRAPPED_BUNDLE_PATH))
 
 INFOFILE=Info.plist
 INFOFILETEMPLATE=$(INFOFILE).template
@@ -34,11 +35,13 @@ include Makefile.inc
 
 # get the parent directory of the specified file/directory
 parentdir=$(shell python -c 'import $(BUILD_UTILS); $(BUILD_UTILS).getParentDir()' $(call shellquote,$(1)))
+existing_parentdir=$(shell python -c 'import $(BUILD_UTILS); $(BUILD_UTILS).getExistingParentDir()' $(call shellquote,$(1)))
 
 M_BUNDLEDIR:=$(call makeescape,$(BUNDLEDIR))
 M_BUNDLECONTENTSDIR:=$(call makeescape,$(BUNDLECONTENTSDIR))
 M_BUNDLEEXEDIR:=$(call makeescape,$(BUNDLEEXEDIR))
 M_WRAPPED_BUNDLE_PATH:=$(call makeescape,$(WRAPPED_BUNDLE_PATH))
+M_WRAPPED_BUNDLE_PARENTDIR:=$(call makeescape,$(WRAPPED_BUNDLE_PARENTDIR))
 
 M_INFOFILE:=$(call makeescape,$(INFOFILE))
 M_INFOFILETEMPLATE:=$(call makeescape,$(INFOFILETEMPLATE))
@@ -57,10 +60,16 @@ NEEDS_BACKUP:=$(shell \
 	&& \
 	[ ! -e $(call shellquote,$(WRAPPED_BUNDLE_PATH)) ] \
 	&& \
-	[ -w $(call shellquote,$(call parentdir,$(WRAPPED_BUNDLE_PATH))) ] \
+	[ -w $(call shellquote,$(call existing_parentdir,$(WRAPPED_BUNDLE_PATH))) ] \
 	&& \
 	echo 1 || : \
 )
+
+# we use $| to separate order-only dependencies in certain rules;
+# this gives us the opportunity to change the order-only dependencies
+# into normal dependencies by setting the $| to an empty string; and
+# that's exactly what we take advantage of if backup is needed
+|:=$(if $(NEEDS_BACKUP),,|)
 
 
 .PHONY: all backup install uninstall clean cleanall $(if $(VARS_CHANGED),$(MAKEFILE))
@@ -73,37 +82,35 @@ $(M_OBJFILE): $(call makeescape,$(SRCNAME).m) $(MAKEFILE)
 $(M_EXEFILE): $(M_OBJFILE)
 	$(LINK.o) $(QUOTED.^) $(LDLIBS) $(OUTPUT_OPTION)
 
-backup:
-	mv $(call shellquote,$(BUNDLEDIR)) $(call shellquote,$(WRAPPED_BUNDLE_PATH))
-
-# this will cause the Makefile to be re-read and the rules re-evaluated
-# during which the make realizes the BUNDLEDIR is gone after the backup
-# target was executed which results in re-execution of the directory
-# creation order-only targets
-# without this rule make would not notice the BUNDLEDIR is gone and the
-# the directory creation order-only targets would not be re-execetued
-Makefile.inc: $(if $(NEEDS_BACKUP),backup)
-
-$(M_BUNDLEDIR):
+$(M_BUNDLEDIR): $(if $(NEEDS_BACKUP),backup)
 	install -d -m 755 $(QUOTED.@)
 
-$(M_BUNDLECONTENTSDIR): | $(M_BUNDLEDIR)
+$(M_BUNDLECONTENTSDIR): $| $(M_BUNDLEDIR)
 	install -d -m 755 $(QUOTED.@)
 
-$(M_BUNDLEEXEDIR): | $(M_BUNDLECONTENTSDIR)
+$(M_BUNDLEEXEDIR): $| $(M_BUNDLECONTENTSDIR)
 	install -d -m 755 $(QUOTED.@)
 
-$(M_BUNDLECONTENTSDIR)/$(M_INFOFILE): $(M_INFOFILETEMPLATE) $(MAKEFILE) | $(M_BUNDLECONTENTSDIR)
+$(M_BUNDLECONTENTSDIR)/$(M_INFOFILE): $(M_INFOFILETEMPLATE) $(MAKEFILE) $| $(M_BUNDLECONTENTSDIR)
 	install -M -m 644 /dev/null $(QUOTED.@)
-	python -c 'import $(BUILD_UTILS); $(BUILD_UTILS).processPList()' $(QUOTED.<) \
+	python -c 'import $(BUILD_UTILS); $(BUILD_UTILS).processPLists(2)' \
+	$(QUOTED.<) $(call shellquote,$(WRAPPED_BUNDLE_PATH)/Contents/Info.plist) \
 	CFBundleDisplayName $(call shellquote,$(call cquote,$(DISPLAYNAME))) \
 	CFBundleExecutable  $(call shellquote,$(call cquote,$(EXEFILE))) \
 	CFBundleIdentifier  $(call shellquote,$(call cquote,$(BUNDLEID))) \
-	NSPrincipalClass    $(call shellquote,$(call cquote,$(BUNDLE_PRINCIPAL_CLASS))) \
+	NSPrincipalClass    $(call shellquote,properties[1].get("NSPrincipalClass", None)) \
 	> $(QUOTED.@)
 
-$(M_BUNDLEEXEDIR)/$(M_EXEFILE): $(M_EXEFILE) | $(M_BUNDLEEXEDIR)
+$(M_BUNDLEEXEDIR)/$(M_EXEFILE): $(M_EXEFILE) $| $(M_BUNDLEEXEDIR)
 	install -m 755 $(QUOTED.<) $(QUOTED.@)
+
+$(M_WRAPPED_BUNDLE_PARENTDIR):
+	$(if $(NEEDS_BACKUP),install -d $(QUOTED.@))
+
+$(M_WRAPPED_BUNDLE_PATH): | $(M_WRAPPED_BUNDLE_PARENTDIR)
+	$(if $(NEEDS_BACKUP),mv $(call shellquote,$(BUNDLEDIR)) $(QUOTED.@))
+
+backup: $(M_WRAPPED_BUNDLE_PATH)
 
 install: $(M_BUNDLECONTENTSDIR)/$(M_INFOFILE) $(M_BUNDLEEXEDIR)/$(M_EXEFILE)
 

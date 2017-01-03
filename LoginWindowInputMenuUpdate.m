@@ -1,153 +1,182 @@
 #import <Foundation/Foundation.h>
 #import <Carbon/Carbon.h>
-#import <objc/objc-runtime.h>
 
 
 #ifndef LWIMU_WRAPPED_BUNDLE_PATH
-#define LWIMU_WRAPPED_BUNDLE_PATH "/System/Library/LoginPlugins/DisplayServices.original.loginPlugin"
+#define LWIMU_WRAPPED_BUNDLE_PATH "/System/Library/LoginPlugins/DisplayServices.loginPlugin"
 #endif
 
-#ifndef LWIMU_BUNDLE_PRINCIPAL_CLASS
-#define LWIMU_BUNDLE_PRINCIPAL_CLASS "LWIMUObserverSubClass"
+#ifndef LWIMU_SCREEN_LOCK_AUTH_CLASS_NAME
+#define LWIMU_SCREEN_LOCK_AUTH_CLASS_NAME "LWBuiltInScreenLockAuthLion"
+#endif
+
+#ifndef LWIMU_STATUS_CONTROLLER_CLASS_NAME
+#define LWIMU_STATUS_CONTROLLER_CLASS_NAME "LUIIMStatusController"
 #endif
 
 
-static id LWIMUObserverSubClassInitImpl (id self, SEL selector) {
-	struct objc_super super = {
-		.receiver    = self,
-		.super_class = class_getSuperclass (object_getClass (self))
-	};
-	id instance = objc_msgSendSuper (&super, selector);
-	if (!instance) {
-		NSLog (@"Failed to initialize subclass of the original DisplayServices login plugin principal class.");
-		return nil;
-	}
+@interface LWIMUInputSourceChangedObserver : NSObject
+@end
 
-	[[NSDistributedNotificationCenter defaultCenter]
-		addObserver: instance
-		selector:    @selector (_LWIMU_handlekInputSourceChangedNotification:)
-		name:        (__bridge NSString *) kTISNotifySelectedKeyboardInputSourceChanged
-		object:      nil
-	];
-
-	return instance;
+@implementation LWIMUInputSourceChangedObserver {
+	BOOL _observing;
+	id __weak _sharedScreenLockAuthInstance;
+	Class __weak _statusControllerClass;
 }
+	- (instancetype) init {
+		if (self = [super init]) {
+			[[NSDistributedNotificationCenter defaultCenter]
+				addObserver: self
+				selector:    @selector (handleInputSourceChangedNotification:)
+				name:        (__bridge NSString *) kTISNotifySelectedKeyboardInputSourceChanged
+				object:      nil
+			];
+			_observing = YES;
 
-static void LWIMUObserverSubClassDeallocImpl (id self, SEL selector) {
-	[[NSDistributedNotificationCenter defaultCenter]
-		removeObserver: self
-		name:           (__bridge NSString *) kTISNotifySelectedKeyboardInputSourceChanged
-		object:         nil
-	];
-
-	struct objc_super super = {
-		.receiver    = self,
-		.super_class = class_getSuperclass (object_getClass (self))
-	};
-	objc_msgSendSuper (&super, selector);
-}
-
-static id LWIMUTraverseInstanceVariables (id object, NSArray *variableNames) {
-	for (NSString *variableName in variableNames) {
-		if (!(object = [object valueForKey: variableName]))
-			return nil;
-	}
-	return object;
-}
-
-static void LWIMUObserverSubClassInputSourceChangedNotificationHandlerImpl (id self, SEL selector, NSNotification *notification) {
-	Class class = NSClassFromString (@"LWBuiltInScreenLockAuthLion");
-	if (!class) {
-		NSLog (@"The LWBuiltInScreenLockAuthLion class is not known.");
-		return;
+			// this causes the internal UI not to be used
+			// cache these or log errors
+			// [self getSharedScreenLockAuthInstance] && [self getStatusControllerClass];
+		}
+		return self;
 	}
 
-	id object;
-	if (!(object = [class performSelector: @selector (sharedBuiltInAuthLion)])) {
-		NSLog (@"Failed to obtain the shared LWBuiltInScreenLockAuthLion instance reference.");
-		return;
+	- (id) getSharedScreenLockAuthInstance {
+		id instance = _sharedScreenLockAuthInstance;
+		while (!instance) {
+			Class screenLockAuthClass = getClass (@LWIMU_SCREEN_LOCK_AUTH_CLASS_NAME);
+			if (!screenLockAuthClass)
+				break;
+
+			if (!(instance = [screenLockAuthClass performSelector: @selector (sharedBuiltInAuthLion)])) {
+				NSLog (@"Failed to obtain the shared %@ instance reference.",
+					NSStringFromClass (screenLockAuthClass)
+				);
+				break;
+			}
+
+			_sharedScreenLockAuthInstance = instance;
+			break;
+		}
+		return instance;
 	}
 
-	if (!((BOOL) [object performSelector: @selector (lockUIIsOnScreen)]))
-		return;
+	- (Class) getStatusControllerClass {
+		Class class = _statusControllerClass;
+		while (!class) {
+			if (!(class = getClass (@LWIMU_STATUS_CONTROLLER_CLASS_NAME)))
+				break;
 
-	if (!(object = LWIMUTraverseInstanceVariables (object,
-		@[@"_screenLockWindowController", @"_statusController", @"_statusControllers"]
-	))) {
-		NSLog (@"Failed to obtain list of lock screen status controllers.");
-		return;
+			_statusControllerClass = class;
+			break;
+		}
+		return class;
 	}
 
-	if (![object isKindOfClass: [NSArray class]]) {
-		NSLog (@"The list of the lock screen status controllers is not a NSArray.");
-		return;
+	- (void) handleInputSourceChangedNotification: (NSNotification *) notification {
+		id object = [self getSharedScreenLockAuthInstance];
+		if (!object)
+			return;
+
+		if (!((BOOL) [object performSelector: @selector (lockUIIsOnScreen)]))
+			return;
+
+		if (!(object = traverseInstanceVariables (object,
+			@[@"_screenLockWindowController", @"_statusController", @"_statusControllers"]
+		))) {
+			NSLog (@"Failed to obtain the list of lock screen status controllers.");
+			return;
+		}
+		if (![object isKindOfClass: [NSArray class]]) {
+			NSLog (@"The list of the lock screen status controllers is not a NSArray.");
+			return;
+		}
+
+		{
+			Class statusControllerClass = [self getStatusControllerClass];
+			if (!statusControllerClass)
+				return;
+
+			for (object in (NSArray *) object) {
+				if ([object isKindOfClass: statusControllerClass])
+					goto status_controller_found;
+			}
+			NSLog (@"No %@ instance found among the lock screen status controllers.",
+				NSStringFromClass (statusControllerClass)
+			);
+			return;
+		}
+
+	status_controller_found:
+		// get the input menu UI instance reference
+		if (!(object = traverseInstanceVariables (object,
+			@[@"_textInputMenu", @"_private"]
+		))) {
+			NSLog (@"Failed to obtain the Input Menu UI reference.");
+			return;
+		}
+
+		// finally send an update message to the input menu UI instance
+		[object performSelector: @selector (update)];
 	}
 
-	class = NSClassFromString (@"LUIIMStatusController");
-	for (object in (NSArray *) object) {
-		if ([object isKindOfClass: class])
-			goto status_controller_found;
-	}
-	NSLog (@"LUIIMStatusController not found in the list of the lock screen status controllers.");
-	return;
-
-status_controller_found:
-	// get the input menu UI object reference
-	if (!(object = LWIMUTraverseInstanceVariables (object,
-		@[@"_textInputMenu", @"_private"]
-	))) {
-		NSLog (@"Failed to obtain the Input Menu UI reference.");
-		return;
+	- (void) dealloc {
+		if (_observing)
+			[[NSDistributedNotificationCenter defaultCenter]
+				removeObserver: self
+				name:           (__bridge NSString *) kTISNotifySelectedKeyboardInputSourceChanged
+				object:         nil
+			];
 	}
 
-	// finally call update on the input menu UI
-	[object performSelector: @selector (update)];
-}
+	static Class getClass (NSString *className) {
+		Class class = NSClassFromString (className);
+		if (!class)
+			NSLog (@"The %@ class is not known.", className);
+		return class;
+	}
+
+	static id traverseInstanceVariables (id object, NSArray *variableNames) {
+		for (NSString *variableName in variableNames) {
+			if (!(object = [object valueForKey: variableName]))
+				break;
+		}
+		return object;
+	}
+@end
 
 
 static NSBundle *_originalBundle;
+static LWIMUInputSourceChangedObserver *_observer;
 
 
 __attribute__ ((constructor)) static void load (void) {
 	NSBundle *originalBundle = [NSBundle bundleWithPath: @LWIMU_WRAPPED_BUNDLE_PATH];
-	if (!originalBundle) {
-		NSLog (@"Failed to load the wrapped bundle: %s", LWIMU_WRAPPED_BUNDLE_PATH);
-		return;
-	}
+	id error;
+	if (
+		(!originalBundle && (error = @"Bundle could not be found/opened."))
+		||
+		(![originalBundle loadAndReturnError: &error] && (error = [error localizedFailureReason]))
+	)
+		NSLog (@"Failed to load the wrapped bundle - %s: %@", LWIMU_WRAPPED_BUNDLE_PATH, error);
+	else
+		_originalBundle = originalBundle;
 
-	Class superClass = originalBundle.principalClass;
-	if (!superClass) {
-		NSLog (@"Failed to load original DisplayServices login plugin principal class.");
-		return;
-	}
-
-	Class subClass = objc_allocateClassPair (superClass, LWIMU_BUNDLE_PRINCIPAL_CLASS, 0);
-	if (!subClass) {
-		NSLog (@"Failed to create subclass of the original DisplayServices login plugin principal class.");
-		return;
-	}
-
-	if (!(
-		class_addMethod (subClass, sel_getUid ("init"), (IMP) &LWIMUObserverSubClassInitImpl, "@@:")
-		&&
-		class_addMethod (subClass, sel_getUid ("dealloc"), (IMP) &LWIMUObserverSubClassDeallocImpl, "v@:")
-		&&
-		class_addMethod (subClass, sel_getUid ("_LWIMU_handlekInputSourceChangedNotification:"), (IMP) &LWIMUObserverSubClassInputSourceChangedNotificationHandlerImpl, "v@:@")
-	)) {
-		NSLog (@"Failed to add methods to the subclass of the original DisplayServices login plugin principal class.");
-		return;
-	}
-
-	objc_registerClassPair (subClass);
-
-	// keep a reference to the original bundle
-	_originalBundle = originalBundle;
+	if (!(_observer = [LWIMUInputSourceChangedObserver new]))
+		NSLog (@"Failed to setup the Input Source Changed notification observer.");
 }
 
 __attribute__ ((destructor)) static void unload (void) {
-	NSBundle *originalBundle = _originalBundle;
-	if (originalBundle) {
-		_originalBundle = nil;
-		[originalBundle unload];
+	{
+		LWIMUInputSourceChangedObserver *observer = _observer;
+		if (observer)
+			_observer = nil;
+	}
+
+	{
+		NSBundle *originalBundle = _originalBundle;
+		if (originalBundle) {
+			_originalBundle = nil;
+			[originalBundle unload];
+		}
 	}
 }
