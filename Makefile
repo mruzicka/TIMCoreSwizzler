@@ -13,7 +13,7 @@ BUNDLEDIR=$(DEFAULT_BUNDLEDIR)
 #### End Of User Configurable Variables ########################################
 
 # note the -emit-llvm flag allows for elimination of unused code (functions) during linking
-CFLAGS+=-O3 -fobjc-arc -fpic -emit-llvm -DTCS_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH)))
+CFLAGS+=-O3 -fobjc-arc -fpic -emit-llvm -DTCS_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH))) -DTCS_LOG_HEADER=$(call shellquote,$(call cquote,$(BINNAME)))
 LDLIBS=-bundle -framework Foundation
 
 override SRCNAME_ARC=BundleWrapper

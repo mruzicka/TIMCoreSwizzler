@@ -29,7 +29,7 @@ BOOL swizzleTextInputMenuDelegate (void) {
 
 	Class textInputMenuDelegateClass = objc_getClass (TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 	if (!textInputMenuDelegateClass) {
-		NSLog (@"Could not find the class to swizzle: %s", TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
+		NSLog (@"%s: Could not find the class to swizzle: %s", TCS_LOG_HEADER, TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 		return NO;
 	}
 
@@ -43,8 +43,8 @@ BOOL swizzleTextInputMenuDelegate (void) {
 		||
 		!(_fSourceListContainsOnlyCurrentSource = class_getInstanceVariable (textInputMenuDelegateClass, "fSourceListContainsOnlyCurrentSource"))
 	) {
-		NSLog (@"The %s class doesn't define the expected methods and/or variables. Bailing out.",
-			class_getName (textInputMenuDelegateClass)
+		NSLog (@"%s: The %s class doesn't define the expected methods and/or variables. Bailing out.",
+			TCS_LOG_HEADER, class_getName (textInputMenuDelegateClass)
 		);
 		return NO;
 	}
@@ -59,13 +59,13 @@ BOOL unswizzleTextInputMenuDelegate (void) {
 
 	Class textInputMenuDelegateClass = objc_getClass (TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 	if (!textInputMenuDelegateClass) {
-		NSLog (@"Could not find the swizzled class: %s", TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
+		NSLog (@"%s: Could not find the swizzled class: %s", TCS_LOG_HEADER, TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 		return NO;
 	}
 
 	Method updateKeyboardInputSources_ = class_getInstanceMethod (textInputMenuDelegateClass, @selector (updateKeyboardInputSources:));
 	if (!updateKeyboardInputSources_) {
-		NSLog (@"Could not find the swizzled method: %s", sel_getName (@selector (updateKeyboardInputSources:)));
+		NSLog (@"%s: Could not find the swizzled method: %s", TCS_LOG_HEADER, sel_getName (@selector (updateKeyboardInputSources:)));
 		return NO;
 	}
 

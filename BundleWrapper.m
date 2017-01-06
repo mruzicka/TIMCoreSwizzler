@@ -35,19 +35,21 @@ __attribute__ ((constructor)) static void load (void) {
 		NSString *error;
 
 		if (!(bundle = loadBundle (@TCS_WRAPPED_BUNDLE_PATH, &error)))
-			NSLog (@"Failed to load the wrapped bundle - %s: %@", TCS_WRAPPED_BUNDLE_PATH, error);
+			NSLog (@"%s: Failed to load the wrapped bundle - %s: %@",
+				TCS_LOG_HEADER, TCS_WRAPPED_BUNDLE_PATH, error
+			);
 		else
 			_wrappedBundle = bundle;
 	}
 
 	if ((_swizzled = swizzleTextInputMenuDelegate ()))
-		NSLog (@"Successfully swizzled TIMCore");
+		NSLog (@"%s: Successfully swizzled TIMCore", TCS_LOG_HEADER);
 }
 
 __attribute__ ((destructor)) static void unload (void) {
 	if (_swizzled) {
 		if (!(_swizzled = !unswizzleTextInputMenuDelegate ()))
-			NSLog (@"Successfully unswizzled TIMCore");
+			NSLog (@"%s: Successfully unswizzled TIMCore", TCS_LOG_HEADER);
 	}
 
 	{
