@@ -80,6 +80,10 @@
 		if (!((BOOL) [object performSelector: @selector (lockUIIsOnScreen)]))
 			return;
 
+#ifdef LWIMU_DEBUG
+		describeObject (object);
+#endif
+
 		if (!(object = traverseInstanceVariables (object,
 			@[@"_screenLockWindowController", @"_statusController", @"_statusControllers"]
 		))) {
@@ -97,6 +101,9 @@
 				return;
 
 			for (object in (NSArray *) object) {
+#ifdef LWIMU_DEBUG
+				describeObject (object);
+#endif
 				if ([object isKindOfClass: statusControllerClass])
 					goto status_controller_found;
 			}
@@ -107,16 +114,24 @@
 		}
 
 	status_controller_found:
-		// get the input menu UI instance reference
+		// get the Text Input Menu delegate reference
 		if (!(object = traverseInstanceVariables (object,
 			@[@"_textInputMenu", @"_private"]
 		))) {
-			NSLog (@"Failed to obtain the Input Menu UI reference.");
+			NSLog (@"Failed to obtain the Text Input Menu delegate reference.");
 			return;
 		}
 
-		// finally send an update message to the input menu UI instance
-		[object performSelector: @selector (update)];
+		// if the menu is not fully initialized, it doesn't handle the input source changed
+		// notifications well, here we make up for that by partially re-doing its initial
+		// initialization
+		if ([[object valueForKey: @"fSourceListContainsOnlyCurrentSource"] boolValue]) {
+			[object performSelector: @selector (createInitialInputSourceList)];
+			[object
+				performSelector: @selector (setInitialInputSource:)
+				withObject:      (__bridge id) (void *) ((uint8_t *) NULL + YES)
+			];
+		}
 	}
 
 	- (void) dealloc {
@@ -135,10 +150,53 @@
 		return class;
 	}
 
+#ifdef LWIMU_DEBUG
+	static NSString *describeObjectRecursively (id object, NSString *indent) {
+		NSMutableArray *classes = [NSMutableArray new];
+
+		for (Class class = [object class];;) {
+			[classes addObject: NSStringFromClass (class)];
+
+			if (!(class = [class superclass]))
+				break;
+		}
+
+		NSMutableString *description = [NSMutableString new];
+		[
+			[NSString stringWithFormat: @"%@\n%@",
+				[classes componentsJoinedByString: @" : "], object
+			]
+				enumerateLinesUsingBlock: ^ (NSString *line, BOOL *stop) {
+					[description appendFormat: @"%@%@\n",
+						[description length] ? indent : @"", line
+					];
+				}
+		];
+
+		if ([object respondsToSelector: @selector (delegate)])
+			[description appendFormat: @"%@Delegate: %@",
+				indent,
+				describeObjectRecursively (
+					[object performSelector: @selector (delegate)],
+					[indent stringByAppendingString: @"        "]
+				)
+			];
+
+		return description;
+	}
+
+	static void describeObject (id object) {
+		NSLog (@"Object: %@", describeObjectRecursively (object, @""));
+	}
+#endif
+
 	static id traverseInstanceVariables (id object, NSArray *variableNames) {
 		for (NSString *variableName in variableNames) {
 			if (!(object = [object valueForKey: variableName]))
 				break;
+#ifdef LWIMU_DEBUG
+			describeObject (object);
+#endif
 		}
 		return object;
 	}
