@@ -1,8 +1,8 @@
-#import "AppleTextInputMenuSwizzle.h"
-#include <objc/objc-runtime.h>
+#import "TextInputMenuSwizzle.h"
+#import <objc/objc-runtime.h>
 
 
-#define LWIMU_TEXT_INPUT_MENU_DELEGATE_CLASS "TIMPrivate"
+#define TCS_TEXT_INPUT_MENU_DELEGATE_CLASS "TIMPrivate"
 
 
 Ivar _fSourceListContainsOnlyCurrentSource;
@@ -17,17 +17,19 @@ void swizzledUpdateKeyboardInputSources (id self, SEL selector, NSNotification *
 		// effectively ignored
 		objc_msgSend (self, @selector (createInitialInputSourceList));
 		objc_msgSend (self, @selector (setInitialInputSource:), YES);
-	} else {
+	} else
 		// if the input sources are already loaded, call the original method
 		// as it works just fine in that case
 		_originalUpdateKeyboardInputSources (self, selector, notification);
-	}
 }
 
 BOOL swizzleTextInputMenuDelegate (void) {
-	Class textInputMenuDelegateClass = objc_getClass (LWIMU_TEXT_INPUT_MENU_DELEGATE_CLASS);
+	if (_originalUpdateKeyboardInputSources)
+		return NO;
+
+	Class textInputMenuDelegateClass = objc_getClass (TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 	if (!textInputMenuDelegateClass) {
-		NSLog (@"Could not find the class to swizzle: %s", LWIMU_TEXT_INPUT_MENU_DELEGATE_CLASS);
+		NSLog (@"Could not find the class to swizzle: %s", TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 		return NO;
 	}
 
@@ -41,7 +43,9 @@ BOOL swizzleTextInputMenuDelegate (void) {
 		||
 		!(_fSourceListContainsOnlyCurrentSource = class_getInstanceVariable (textInputMenuDelegateClass, "fSourceListContainsOnlyCurrentSource"))
 	) {
-		NSLog (@"The %s class doesn't contain the expected methods and/or variables. Bailing out.", LWIMU_TEXT_INPUT_MENU_DELEGATE_CLASS);
+		NSLog (@"The %s class doesn't define the expected methods and/or variables. Bailing out.",
+			class_getName (textInputMenuDelegateClass)
+		);
 		return NO;
 	}
 
@@ -53,9 +57,9 @@ BOOL unswizzleTextInputMenuDelegate (void) {
 	if (!_originalUpdateKeyboardInputSources)
 		return NO;
 
-	Class textInputMenuDelegateClass = objc_getClass (LWIMU_TEXT_INPUT_MENU_DELEGATE_CLASS);
+	Class textInputMenuDelegateClass = objc_getClass (TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 	if (!textInputMenuDelegateClass) {
-		NSLog (@"Could not find the swizzled class: %s", LWIMU_TEXT_INPUT_MENU_DELEGATE_CLASS);
+		NSLog (@"Could not find the swizzled class: %s", TCS_TEXT_INPUT_MENU_DELEGATE_CLASS);
 		return NO;
 	}
 

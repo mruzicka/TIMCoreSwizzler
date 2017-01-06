@@ -2,22 +2,22 @@ override MAKEFILE:=$(lastword $(MAKEFILE_LIST))
 
 #### User Configurable Variables ###############################################
 
-BUNDLENAME=Apple Text Input Menu Swizzler
-BINNAME=AppleTextInputMenuSwizzler
+BUNDLENAME=TIMCore Swizzler
+BINNAME=TIMCoreSwizzler
 DISPLAYNAME=$(BUNDLENAME)
-BUNDLEID=net.mruza.AppleTextInputMenuSwizzler
-WRAPPED_BUNDLE_PATH=/Library/LoginPlugins/DisplayServices.loginPlugin
+BUNDLEID=net.mruza.TIMCoreSwizzler
+WRAPPED_BUNDLE_PATH=/System/Library/CoreServices/Menu Extras/TextInput.menu/Contents/PrivateSupport/TIMCore.bundle
 
 BUNDLEDIR=$(DEFAULT_BUNDLEDIR)
 
 #### End Of User Configurable Variables ########################################
 
 # note the -emit-llvm flag allows for elimination of unused code (functions) during linking
-CFLAGS+=-O3 -fobjc-arc -fpic -emit-llvm -DLWIMU_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH)))
-LDLIBS=-bundle -framework Foundation -framework Carbon
+CFLAGS+=-O3 -fobjc-arc -fpic -emit-llvm -DTCS_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH)))
+LDLIBS=-bundle -framework Foundation
 
 override SRCNAME_ARC=BundleWrapper
-override SRCNAME_NO_ARC=AppleTextInputMenuSwizzle
+override SRCNAME_NO_ARC=TextInputMenuSwizzle
 override DEFAULT_BUNDLEDIR=installroot/$(BUNDLENAME).bundle
 override VARSFILE=.$(MAKEFILE).vars
 

@@ -1,5 +1,5 @@
 .Makefile.vars
-AppleTextInputMenuSwizzler
+TIMCoreSwizzler
 *.o
 BuildUtils.pyc
 installroot/

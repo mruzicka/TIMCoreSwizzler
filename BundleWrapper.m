@@ -1,11 +1,9 @@
-#import "AppleTextInputMenuSwizzle.h"
+#import "TextInputMenuSwizzle.h"
 
 
-#ifndef LWIMU_WRAPPED_BUNDLE_PATH
-#define LWIMU_WRAPPED_BUNDLE_PATH "/System/Library/LoginPlugins/DisplayServices.loginPlugin"
+#ifndef TCS_WRAPPED_BUNDLE_PATH
+#define TCS_WRAPPED_BUNDLE_PATH "/System/Library/CoreServices/Menu Extras/TextInput.menu/Contents/PrivateSupport/TIMCore.bundle"
 #endif
-
-#define LWIMU_TIM_CORE_BUNDLE_PATH "/System/Library/CoreServices/Menu Extras/TextInput.menu/Contents/SharedSupport/TIMCore.bundle"
 
 
 static NSBundle *loadBundle (NSString *bundlePath, NSString **error) {
@@ -27,7 +25,7 @@ static NSBundle *loadBundle (NSString *bundlePath, NSString **error) {
 }
 
 
-static NSBundle *_originalBundle;
+static NSBundle *_wrappedBundle;
 BOOL _swizzled;
 
 
@@ -36,15 +34,10 @@ __attribute__ ((constructor)) static void load (void) {
 		NSBundle *bundle;
 		NSString *error;
 
-		if (!(bundle = loadBundle (@LWIMU_WRAPPED_BUNDLE_PATH, &error)))
-			NSLog (@"Failed to load the wrapped bundle - %s: %@", LWIMU_WRAPPED_BUNDLE_PATH, error);
+		if (!(bundle = loadBundle (@TCS_WRAPPED_BUNDLE_PATH, &error)))
+			NSLog (@"Failed to load the wrapped bundle - %s: %@", TCS_WRAPPED_BUNDLE_PATH, error);
 		else
-			_originalBundle = bundle;
-
-		if (!(bundle = loadBundle (@LWIMU_TIM_CORE_BUNDLE_PATH, &error))) {
-			NSLog (@"Failed to load the TIMCore bundle - %s: %@", LWIMU_TIM_CORE_BUNDLE_PATH, error);
-			return;
-		}
+			_wrappedBundle = bundle;
 	}
 
 	if ((_swizzled = swizzleTextInputMenuDelegate ()))
@@ -58,9 +51,9 @@ __attribute__ ((destructor)) static void unload (void) {
 	}
 
 	{
-		NSBundle *bundle = _originalBundle;
+		NSBundle *bundle = _wrappedBundle;
 		if (bundle) {
-			_originalBundle = nil;
+			_wrappedBundle = nil;
 			[bundle unload];
 		}
 	}
