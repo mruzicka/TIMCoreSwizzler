@@ -1,5 +1,5 @@
 .Makefile.vars
-LoginWindowInputMenuUpdate
+AppleTextInputMenuSwizzler
 *.o
 BuildUtils.pyc
 installroot/

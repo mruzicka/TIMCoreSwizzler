@@ -2,10 +2,10 @@ override MAKEFILE:=$(lastword $(MAKEFILE_LIST))
 
 #### User Configurable Variables ###############################################
 
-BUNDLENAME=Login Window Input Menu Update
-BINNAME=$(SRCNAME)
+BUNDLENAME=Apple Text Input Menu Swizzler
+BINNAME=AppleTextInputMenuSwizzler
 DISPLAYNAME=$(BUNDLENAME)
-BUNDLEID=net.mruza.LoginWindowInputMenuUpdate
+BUNDLEID=net.mruza.AppleTextInputMenuSwizzler
 WRAPPED_BUNDLE_PATH=/Library/LoginPlugins/DisplayServices.loginPlugin
 
 BUNDLEDIR=$(DEFAULT_BUNDLEDIR)
@@ -13,10 +13,11 @@ BUNDLEDIR=$(DEFAULT_BUNDLEDIR)
 #### End Of User Configurable Variables ########################################
 
 # note the -emit-llvm flag allows for elimination of unused code (functions) during linking
-CFLAGS+=-O3 -fpic -fobjc-arc -emit-llvm -DLWIMU_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH)))
+CFLAGS+=-O3 -fobjc-arc -fpic -emit-llvm -DLWIMU_WRAPPED_BUNDLE_PATH=$(call shellquote,$(call cquote,$(WRAPPED_BUNDLE_PATH)))
 LDLIBS=-bundle -framework Foundation -framework Carbon
 
-override SRCNAME=LoginWindowInputMenuUpdate
+override SRCNAME_ARC=BundleWrapper
+override SRCNAME_NO_ARC=AppleTextInputMenuSwizzle
 override DEFAULT_BUNDLEDIR=installroot/$(BUNDLENAME).bundle
 override VARSFILE=.$(MAKEFILE).vars
 
@@ -28,7 +29,8 @@ WRAPPED_BUNDLE_PARENTDIR=$(call parentdir,$(WRAPPED_BUNDLE_PATH))
 INFOFILE=Info.plist
 INFOFILETEMPLATE=$(INFOFILE).template
 
-OBJFILE=$(SRCNAME).o
+OBJFILE_ARC=$(SRCNAME_ARC).o
+OBJFILE_NO_ARC=$(SRCNAME_NO_ARC).o
 EXEFILE=$(BINNAME)
 
 include Makefile.inc
@@ -46,7 +48,8 @@ M_WRAPPED_BUNDLE_PARENTDIR:=$(call makeescape,$(WRAPPED_BUNDLE_PARENTDIR))
 M_INFOFILE:=$(call makeescape,$(INFOFILE))
 M_INFOFILETEMPLATE:=$(call makeescape,$(INFOFILETEMPLATE))
 
-M_OBJFILE:=$(call makeescape,$(OBJFILE))
+M_OBJFILE_ARC:=$(call makeescape,$(OBJFILE_ARC))
+M_OBJFILE_NO_ARC:=$(call makeescape,$(OBJFILE_NO_ARC))
 M_EXEFILE:=$(call makeescape,$(EXEFILE))
 
 VARS_CHANGED:=$(shell \
@@ -77,9 +80,12 @@ NEEDS_BACKUP:=$(shell \
 
 all: $(M_EXEFILE) |
 
-$(M_OBJFILE): $(call makeescape,$(SRCNAME).m) $(MAKEFILE)
+$(M_OBJFILE_ARC): $(call makeescape,$(SRCNAME_ARC).m) $(call makeescape,$(SRCNAME_NO_ARC).h) $(MAKEFILE)
 
-$(M_EXEFILE): $(M_OBJFILE)
+$(M_OBJFILE_NO_ARC): CFLAGS += -fno-objc-arc -fvisibility=hidden
+$(M_OBJFILE_NO_ARC): $(call makeescape,$(SRCNAME_NO_ARC).m) $(call makeescape,$(SRCNAME_NO_ARC).h) $(MAKEFILE)
+
+$(M_EXEFILE): $(M_OBJFILE_ARC) $(M_OBJFILE_NO_ARC)
 	$(LINK.o) $(QUOTED.^) $(LDLIBS) $(OUTPUT_OPTION)
 
 $(M_BUNDLEDIR): $(if $(NEEDS_BACKUP),backup)
@@ -118,7 +124,7 @@ uninstall: $(if $(NEEDS_BACKUP),backup)
 	-rm -rf $(call shellquote,$(BUNDLEDIR))
 
 clean:
-	-rm -f  $(call shellquote,$(OBJFILE))
+	-rm -f  $(call shellquote,$(OBJFILE_ARC)) $(call shellquote,$(OBJFILE_NO_ARC))
 
 cleanall: clean
 	-rm -f  $(call shellquote,$(EXEFILE))
