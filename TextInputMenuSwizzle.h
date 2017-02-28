@@ -1,3 +1,5 @@
+// vim: filetype=objc
+
 #import <Foundation/Foundation.h>
 
 #ifndef TCS_LOG_HEADER
